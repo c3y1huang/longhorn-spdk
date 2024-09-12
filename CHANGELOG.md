@@ -1,6 +1,34 @@
 # Changelog
 
-## v24.09.1: (Upcoming Release)
+## v25.01: (Upcoming Release)
+
+### bdev_nvme
+
+Added controller configuration consistency check, so all controllers created with the same name will
+be forced to have consistent setting, either multipath or failover. No mixing of different '-x'
+options will be allowed.
+
+Changed default mode: if no '-x' option is specified in bdev_nvme_attach_controller RPC call,
+the multipath mode will be assigned as a default.
+
+Changed `spdk_bdev_nvme_create` API function, the `multipath` pramater was removed as it is redundant
+to `multipath` field in spdk_bdev_nvme_ctrlr_opts structure passed as a parameter to this function.
+If multipathing shall be enabled for nvme bdev, `bdev_opts.multipath` shall be set to `true`. When
+`bdev_opts.multipath` is set to `false`, failover mode is enabled.
+
+### env
+
+Added 3 APIs to handle multiple interrupts for PCI device `spdk_pci_device_enable_interrupts()`,
+`spdk_pci_device_disable_interrupts()`, and `spdk_pci_device_get_interrupt_efd_by_index()`.
+
+### nvmf
+
+Added public API `spdk_nvmf_send_discovery_log_notice` to send discovery log page
+change notice to client.
+
+### reduce
+
+Add `spdk_reduce_vol_get_info()` to get the information for the compressed volume.
 
 ## v24.09
 
