@@ -416,12 +416,14 @@ spdk_nvme_ctrlr_connect_io_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk_nvme
 	}
 
 	nvme_ctrlr_lock(ctrlr);
+	SPDK_NOTICELOG("[DEBUG][1] calling nvme_transport_ctrlr_connect_qpair\n");
 	rc = nvme_transport_ctrlr_connect_qpair(ctrlr, qpair);
 	nvme_ctrlr_unlock(ctrlr);
 
 	if (ctrlr->quirks & NVME_QUIRK_DELAY_AFTER_QUEUE_ALLOC) {
 		spdk_delay_us(100);
 	}
+	SPDK_NOTICELOG("[DEBUG][1] completed nvme_transport_ctrlr_connect_qpair\n");
 
 	return rc;
 }
@@ -440,6 +442,7 @@ int
 spdk_nvme_ctrlr_get_admin_qp_fd(struct spdk_nvme_ctrlr *ctrlr,
 				struct spdk_event_handler_opts *opts)
 {
+	SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_qpair_get_fd\n");
 	return spdk_nvme_qpair_get_fd(ctrlr->adminq, opts);
 }
 
@@ -500,6 +503,7 @@ spdk_nvme_ctrlr_alloc_io_qpair(struct spdk_nvme_ctrlr *ctrlr,
 		goto unlock;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling nvme_transport_ctrlr_connect_io_qpair\n");
 	rc = spdk_nvme_ctrlr_connect_io_qpair(ctrlr, qpair);
 	if (rc != 0) {
 		NVME_CTRLR_ERRLOG(ctrlr, "nvme_transport_ctrlr_connect_io_qpair() failed\n");
@@ -552,6 +556,7 @@ spdk_nvme_ctrlr_reconnect_io_qpair(struct spdk_nvme_qpair *qpair)
 		goto out;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling nvme_transport_ctrlr_connect_qpair\n");
 	rc = nvme_transport_ctrlr_connect_qpair(ctrlr, qpair);
 	if (rc) {
 		rc = -EAGAIN;
@@ -1801,6 +1806,7 @@ nvme_ctrlr_reinitialize_io_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk_nvme
 	/* Force a synchronous connect. */
 	async = qpair->async;
 	qpair->async = false;
+	SPDK_NOTICELOG("[DEBUG] calling nvme_transport_ctrlr_connect_qpair\n");
 	rc = nvme_transport_ctrlr_connect_qpair(ctrlr, qpair);
 	qpair->async = async;
 
@@ -3720,6 +3726,7 @@ nvme_ctrlr_get_ref_count(struct spdk_nvme_ctrlr *ctrlr)
 struct spdk_pci_device *
 nvme_ctrlr_proc_get_devhandle(struct spdk_nvme_ctrlr *ctrlr)
 {
+	SPDK_NOTICELOG("[DEBUG] getting devhandle\n");
 	struct spdk_nvme_ctrlr_process	*active_proc;
 	struct spdk_pci_device		*devhandle = NULL;
 
@@ -3731,6 +3738,8 @@ nvme_ctrlr_proc_get_devhandle(struct spdk_nvme_ctrlr *ctrlr)
 	}
 
 	nvme_ctrlr_unlock(ctrlr);
+
+	SPDK_NOTICELOG("[DEBUG] completed getting devhandle: active_proc->pid=%d\n", active_proc->pid);
 
 	return devhandle;
 }
@@ -3979,6 +3988,7 @@ nvme_ctrlr_process_init(struct spdk_nvme_ctrlr *ctrlr)
 	/*
 	 * Check if the current initialization step is done or has timed out.
 	 */
+	SPDK_NOTICELOG("[DEBUG] ctrlr->state = %s\n", nvme_ctrlr_state_string(ctrlr->state));
 	switch (ctrlr->state) {
 	case NVME_CTRLR_STATE_INIT_DELAY:
 		nvme_ctrlr_set_state(ctrlr, NVME_CTRLR_STATE_INIT, ready_timeout_in_ms);
@@ -4001,6 +4011,7 @@ nvme_ctrlr_process_init(struct spdk_nvme_ctrlr *ctrlr)
 		break;
 
 	case NVME_CTRLR_STATE_CONNECT_ADMINQ: /* synonymous with NVME_CTRLR_STATE_INIT and NVME_CTRLR_STATE_DISCONNECTED */
+		SPDK_NOTICELOG("[DEBUG] calling nvme_transport_ctrlr_connect_qpair\n");
 		rc = nvme_transport_ctrlr_connect_qpair(ctrlr, ctrlr->adminq);
 		if (rc == 0) {
 			nvme_ctrlr_set_state(ctrlr, NVME_CTRLR_STATE_WAIT_FOR_CONNECT_ADMINQ,
@@ -4289,6 +4300,8 @@ nvme_ctrlr_construct(struct spdk_nvme_ctrlr *ctrlr)
 {
 	int rc;
 
+	// Not sure if this is required for TCP transport.
+	// if (ctrlr->trid.trtype == SPDK_NVME_TRANSPORT_PCIE || ctrlr->trid.trtype == SPDK_NVME_TRANSPORT_TCP) {
 	if (ctrlr->trid.trtype == SPDK_NVME_TRANSPORT_PCIE) {
 		nvme_ctrlr_set_state(ctrlr, NVME_CTRLR_STATE_INIT_DELAY, NVME_TIMEOUT_INFINITE);
 	} else {

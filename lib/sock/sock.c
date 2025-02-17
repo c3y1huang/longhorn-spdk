@@ -201,6 +201,11 @@ spdk_sock_map_find_free(struct spdk_sock_map *map)
 }
 
 int
+spdk_get_sock_fd(struct spdk_sock *sock) {
+	return sock->net_impl->get_fd(sock);
+}
+
+int
 spdk_sock_get_optimal_sock_group(struct spdk_sock *sock, struct spdk_sock_group **group,
 				 struct spdk_sock_group *hint)
 {
@@ -487,6 +492,7 @@ spdk_sock_close(struct spdk_sock **_sock)
 		return 0;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling spdk_sock_abort_requests(sock)\n");
 	spdk_sock_abort_requests(sock);
 
 	return sock->net_impl->close(sock);
@@ -535,6 +541,7 @@ spdk_sock_writev_async(struct spdk_sock *sock, struct spdk_sock_request *req)
 		return;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling sock->net_impl->writev_async\n");
 	sock->net_impl->writev_async(sock, req);
 }
 
@@ -689,11 +696,13 @@ spdk_sock_group_remove_sock(struct spdk_sock_group *group, struct spdk_sock *soc
 	group_impl = sock_get_group_impl_from_group(sock, group);
 	if (group_impl == NULL) {
 		errno = EINVAL;
+		SPDK_NOTICELOG("[DEBUG] group_impl == NULL, returning -1\n");
 		return -1;
 	}
 
 	assert(group_impl == sock->group_impl);
 
+	SPDK_NOTICELOG("[DEBUG] calling group_impl->net_impl->group_impl_remove_sock\n");
 	rc = group_impl->net_impl->group_impl_remove_sock(group_impl, sock);
 	if (rc == 0) {
 		TAILQ_REMOVE(&group_impl->socks, sock, link);
@@ -702,6 +711,7 @@ spdk_sock_group_remove_sock(struct spdk_sock_group *group, struct spdk_sock *soc
 		sock->cb_arg = NULL;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] returning rc=%d\n", rc);
 	return rc;
 }
 

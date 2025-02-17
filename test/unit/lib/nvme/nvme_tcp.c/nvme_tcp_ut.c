@@ -37,6 +37,9 @@ DEFINE_STUB(spdk_sock_group_get_ctx,
 	    (struct spdk_sock_group *group),
 	    NULL);
 DEFINE_STUB(spdk_sock_get_numa_id, int32_t, (struct spdk_sock *sock), SPDK_ENV_NUMA_ID_ANY);
+DEFINE_STUB(spdk_sock_group_register_interrupt, int, (struct spdk_sock_group *group,
+	uint32_t events, spdk_interrupt_fn fn, void *arg, const char *name), 0);
+DEFINE_STUB(spdk_get_sock_fd, int, (struct spdk_sock *sock), 0);
 
 DEFINE_STUB(spdk_nvme_poll_group_process_completions, int64_t, (struct spdk_nvme_poll_group *group,
 		uint32_t completions_per_qpair, spdk_nvme_disconnected_qpair_cb disconnected_qpair_cb), 0);
@@ -59,6 +62,10 @@ DEFINE_STUB(spdk_memory_domain_translate_data, int,
 	     void *addr, size_t len, struct spdk_memory_domain_translation_result *result), 0);
 DEFINE_STUB_V(spdk_memory_domain_invalidate_data, (struct spdk_memory_domain *domain,
 		void *domain_ctx, struct iovec *iov, uint32_t iovcnt));
+DEFINE_STUB_V(spdk_sock_group_unregister_interrupt, (struct spdk_sock_group *group));
+// C3Y1: just testing
+DEFINE_STUB(nvme_ctrlr_proc_get_devhandle, struct spdk_pci_device *,
+	(struct spdk_nvme_ctrlr *ctrlr), NULL);
 
 static void
 nvme_transport_ctrlr_disconnect_qpair_done_mocked(struct spdk_nvme_qpair *qpair)

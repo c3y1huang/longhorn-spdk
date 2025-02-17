@@ -415,6 +415,7 @@ spdk_fd_group_add_ext(struct spdk_fd_group *fgrp, int efd, spdk_fd_fn fn, void *
 	/* check if there is already one function registered for this fd */
 	TAILQ_FOREACH(ehdlr, &fgrp->event_handlers, next) {
 		if (ehdlr->fd == efd) {
+			SPDK_NOTICELOG("\n\n[DEBUG] fd %d already registered\n", efd);
 			return -EEXIST;
 		}
 	}
@@ -425,6 +426,7 @@ spdk_fd_group_add_ext(struct spdk_fd_group *fgrp, int efd, spdk_fd_fn fn, void *
 		return -errno;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] registering fd %d\n", efd);
 	ehdlr->fd = efd;
 	ehdlr->fn = fn;
 	ehdlr->fn_arg = arg;
@@ -447,6 +449,8 @@ spdk_fd_group_add_ext(struct spdk_fd_group *fgrp, int efd, spdk_fd_fn fn, void *
 
 	TAILQ_INSERT_TAIL(&fgrp->event_handlers, ehdlr, next);
 	root->num_fds++;
+
+	SPDK_NOTICELOG("[DEBUG] added fd %d to fd group(%p)\n", efd, fgrp);
 
 	return 0;
 }

@@ -117,6 +117,7 @@ struct spdk_net_impl {
 
 	int (*get_opts)(struct spdk_sock_impl_opts *opts, size_t *len);
 	int (*set_opts)(const struct spdk_sock_impl_opts *opts, size_t len);
+	int (*get_fd)(struct spdk_sock *sock);
 
 	STAILQ_ENTRY(spdk_net_impl) link;
 };
@@ -211,6 +212,8 @@ spdk_sock_request_put(struct spdk_sock *sock, struct spdk_sock_request *req, int
 static inline int
 spdk_sock_abort_requests(struct spdk_sock *sock)
 {
+	SPDK_NOTICELOG("[DEBUG] aborting requests on sock %p\n", sock);
+
 	struct spdk_sock_request *req;
 	bool closed;
 	int rc = 0;
@@ -225,7 +228,7 @@ spdk_sock_abort_requests(struct spdk_sock *sock)
 #ifdef DEBUG
 		req->internal.curr_list = NULL;
 #endif
-
+		SPDK_NOTICELOG("[DEBUG] calling pending request cb_fn %p with -ECANCELED(%d)\n", req->cb_fn, -ECANCELED);
 		req->cb_fn(req->cb_arg, -ECANCELED);
 
 		req = TAILQ_FIRST(&sock->pending_reqs);
@@ -242,6 +245,7 @@ spdk_sock_abort_requests(struct spdk_sock *sock)
 		assert(sock->queued_iovcnt >= req->iovcnt);
 		sock->queued_iovcnt -= req->iovcnt;
 
+		SPDK_NOTICELOG("[DEBUG] calling queued request cb_fn %p with -ECANCELED(%d)\n", req->cb_fn, -ECANCELED);
 		req->cb_fn(req->cb_arg, -ECANCELED);
 
 		req = TAILQ_FIRST(&sock->queued_reqs);
@@ -383,6 +387,8 @@ spdk_sock_get_placement_id(int fd, enum spdk_placement_mode mode, int *placement
 		break;
 	}
 }
+
+int spdk_get_sock_fd(struct spdk_sock *sock);
 
 /**
  * Insert a group into the placement map.

@@ -801,6 +801,7 @@ spdk_nvme_ctrlr_connect_io_qpair(struct spdk_nvme_ctrlr *ctrlr,
 	qpair->failure_reason = SPDK_NVME_QPAIR_FAILURE_NONE;
 
 	if (qpair->poll_group) {
+		SPDK_NOTICELOG("[DEBUG] calling nvme_poll_group_connect_qpair\n");
 		nvme_poll_group_connect_qpair(qpair);
 	}
 

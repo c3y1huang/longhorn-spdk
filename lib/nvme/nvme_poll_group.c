@@ -173,6 +173,7 @@ nvme_poll_group_add_disconnect_qpair_fd(struct spdk_nvme_poll_group *group)
 	spdk_fd_group_get_default_event_handler_opts(&opts, sizeof(opts));
 	opts.fd_type = SPDK_FD_TYPE_EVENTFD;
 
+	SPDK_NOTICELOG("[DEBUG] calling SPDK_FD_GROUP_ADD_EXT, fd=%d\n", fd);
 	return SPDK_FD_GROUP_ADD_EXT(group->fgrp, fd, nvme_poll_group_read_disconnect_qpair_fd,
 				     group, &opts);
 }
@@ -195,6 +196,7 @@ nvme_poll_group_add_disconnect_qpair_fd(struct spdk_nvme_poll_group *group)
 int
 spdk_nvme_poll_group_add(struct spdk_nvme_poll_group *group, struct spdk_nvme_qpair *qpair)
 {
+	SPDK_NOTICELOG("[DEBUG] spdk_nvme_poll_group_add\n");
 	struct spdk_nvme_transport_poll_group *tgroup;
 	const struct spdk_nvme_transport *transport;
 	int rc;
@@ -203,18 +205,23 @@ spdk_nvme_poll_group_add(struct spdk_nvme_poll_group *group, struct spdk_nvme_qp
 		return -EINVAL;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] attempting to enable group->enable_interrupts\n");
 	if (!group->enable_interrupts_is_valid) {
+		SPDK_NOTICELOG("[DEBUG] enabling group->enable_interrupts\n");
 		group->enable_interrupts_is_valid = true;
 		group->enable_interrupts = qpair->ctrlr->opts.enable_interrupts;
 		if (group->enable_interrupts) {
+			SPDK_NOTICELOG("[DEBUG] calling nvme_poll_group_add_disconnect_qpair_fd\n");
 			rc = nvme_poll_group_add_disconnect_qpair_fd(group);
 			if (rc != 0) {
+				SPDK_NOTICELOG("[DEBUG] returning %d\n", rc);
 				return rc;
 			}
 		}
 	} else if (qpair->ctrlr->opts.enable_interrupts != group->enable_interrupts) {
-		SPDK_ERRLOG("Queue pair %s interrupts cannot be added to poll group\n",
+		SPDK_ERRLOG("[DEBUG] Queue pair %s interrupts cannot be added to poll group\n",
 			    qpair->ctrlr->opts.enable_interrupts ? "without" : "with");
+		SPDK_NOTICELOG("[DEBUG] returning %d\n", -EINVAL);
 		return -EINVAL;
 	}
 
@@ -226,9 +233,11 @@ spdk_nvme_poll_group_add(struct spdk_nvme_poll_group *group, struct spdk_nvme_qp
 
 	/* See if a new transport has been added (dlopen style) and we need to update the poll group */
 	if (!tgroup) {
+		SPDK_NOTICELOG("[DEBUG] !tgroup\n");
 		transport = nvme_get_first_transport();
 		while (transport != NULL) {
 			if (transport == qpair->transport) {
+				SPDK_NOTICELOG("[DEBUG] calling nvme_transport_poll_group_create\n");
 				tgroup = nvme_transport_poll_group_create(transport);
 				if (tgroup == NULL) {
 					return -ENOMEM;
@@ -237,10 +246,16 @@ spdk_nvme_poll_group_add(struct spdk_nvme_poll_group *group, struct spdk_nvme_qp
 				STAILQ_INSERT_TAIL(&group->tgroups, tgroup, link);
 				break;
 			}
+			SPDK_NOTICELOG("[DEBUG] calling nvme_get_next_transport\n");
 			transport = nvme_get_next_transport(transport);
 		}
 	}
 
+	// if (spdk_interrupt_mode_is_enabled()) {
+	// 	return 0;
+	// }
+
+	SPDK_NOTICELOG("[DEBUG] return tgroup ? nvme_transport_poll_group_add(tgroup, qpair) : -ENODEV\n");
 	return tgroup ? nvme_transport_poll_group_add(tgroup, qpair) : -ENODEV;
 }
 
@@ -280,12 +295,14 @@ nvme_poll_group_add_qpair_fd(struct spdk_nvme_qpair *qpair)
 		return 0;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_qpair_get_fd\n");
 	fd = spdk_nvme_qpair_get_fd(qpair, &opts);
 	if (fd < 0) {
 		SPDK_ERRLOG("Cannot get fd for the qpair: %d\n", fd);
 		return -EINVAL;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling SPDK_FD_GROUP_ADD_EXT, fd=%d\n", fd);
 	return SPDK_FD_GROUP_ADD_EXT(group->fgrp, fd, nvme_qpair_process_completion_wrapper,
 				     qpair, &opts);
 }
@@ -301,6 +318,7 @@ nvme_poll_group_remove_qpair_fd(struct spdk_nvme_qpair *qpair)
 		return;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_qpair_get_fd\n");
 	fd = spdk_nvme_qpair_get_fd(qpair, NULL);
 	if (fd < 0) {
 		SPDK_ERRLOG("Cannot get fd for the qpair: %d\n", fd);
@@ -314,19 +332,33 @@ nvme_poll_group_remove_qpair_fd(struct spdk_nvme_qpair *qpair)
 int
 nvme_poll_group_connect_qpair(struct spdk_nvme_qpair *qpair)
 {
+	SPDK_NOTICELOG("[DEBUG][5][1] starting nvme_poll_group_connect_qpair\n");
 	int rc;
 
+	SPDK_NOTICELOG("[DEBUG][5][2] calling nvme_transport_poll_group_connect_qpair\n");
 	rc = nvme_transport_poll_group_connect_qpair(qpair);
 	if (rc != 0) {
 		return rc;
 	}
+	SPDK_NOTICELOG("[DEBUG][5][2] completed nvme_transport_poll_group_connect_qpair\n");
 
+	SPDK_NOTICELOG("[DEBUG][5][3] calling nvme_poll_group_add_qpair_fd\n");
 	rc = nvme_poll_group_add_qpair_fd(qpair);
+	// if (rc == -EEXIST) {
+	// 	SPDK_NOTICELOG("[DEBUG] qpair fd already added to poll group\n");
+	// 	return 0;
+	// }
 	if (rc != 0) {
+		SPDK_NOTICELOG("[DEBUG][5][3][ERR] failed calling nvme_poll_group_add_qpair_fd: rc=%d\n", rc);
+
+		SPDK_NOTICELOG("[DEBUG][5][4] calling nvme_transport_poll_group_disconnect_qpair();\n");
 		nvme_transport_poll_group_disconnect_qpair(qpair);
+		SPDK_NOTICELOG("[DEBUG][5][4] completed nvme_transport_poll_group_disconnect_qpair();\n");
 		return rc;
 	}
+	SPDK_NOTICELOG("[DEBUG][5][3] completed nvme_poll_group_add_qpair_fd\n");
 
+	SPDK_NOTICELOG("[DEBUG][5][1] completed nvme_poll_group_connect_qpair\n");
 	return 0;
 }
 

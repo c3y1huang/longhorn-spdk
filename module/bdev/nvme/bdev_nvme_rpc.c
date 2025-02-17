@@ -386,17 +386,21 @@ rpc_bdev_nvme_attach_controller_done(void *cb_ctx, size_t bdev_count, int rc)
 	if (rc < 0) {
 		spdk_jsonrpc_send_error_response(request, rc, spdk_strerror(-rc));
 		free_rpc_bdev_nvme_attach_controller_ctx(ctx);
+		SPDK_NOTICELOG("[DEBUG] rpc_bdev_nvme_attach_controller_done failed: %d\n", rc);
 		return;
 	}
 
 	ctx->bdev_count = bdev_count;
 	spdk_bdev_wait_for_examine(rpc_bdev_nvme_attach_controller_examined, ctx);
+	SPDK_NOTICELOG("[DEBUG] rpc_bdev_nvme_attach_controller_done: bdev_count: %lu\n", bdev_count);
 }
 
 static void
 rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 				const struct spdk_json_val *params)
 {
+	SPDK_NOTICELOG("\n\n\n\n[DEBUG] rpc_bdev_nvme_attach_controller: start\n");
+
 	struct rpc_bdev_nvme_attach_controller_ctx *ctx;
 	struct spdk_nvme_transport_id trid = {};
 	const struct spdk_nvme_ctrlr_opts *drv_opts;
@@ -437,6 +441,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 	}
 
 	/* Parse trstring */
+	SPDK_NOTICELOG("[DEBUG] spdk_nvme_transport_id_populate_trstring\n");
 	rc = spdk_nvme_transport_id_populate_trstring(&trid, ctx->req.trtype);
 	if (rc < 0) {
 		SPDK_ERRLOG("Failed to parse trtype: %s\n", ctx->req.trtype);
@@ -444,10 +449,13 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 						     ctx->req.trtype);
 		goto cleanup;
 	}
+	// SPDK_NOTICELOG("[DEBUG] spdk_nvme_transport_id_populate_trstring done: %s\n", trid.trstring);
 
 	/* Parse trtype */
 	rc = spdk_nvme_transport_id_parse_trtype(&trid.trtype, ctx->req.trtype);
+	// SPDK_NOTICELOG("[DEBUG] spdk_nvme_transport_id_parse_trtype asserting: %d\n", rc);
 	assert(rc == 0);
+	// SPDK_NOTICELOG("[DEBUG] spdk_nvme_transport_id_parse_trtype done: %d\n", rc);
 
 	/* Parse traddr */
 	maxlen = sizeof(trid.traddr);
@@ -458,6 +466,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 		goto cleanup;
 	}
 	memcpy(trid.traddr, ctx->req.traddr, len + 1);
+	SPDK_NOTICELOG("[DEBUG] trid.traddr: %s\n", trid.traddr);
 
 	/* Parse adrfam */
 	if (ctx->req.adrfam) {
@@ -469,6 +478,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 			goto cleanup;
 		}
 	}
+	// SPDK_NOTICELOG("[DEBUG] trid.adrfam: %d\n", trid.adrfam);
 
 	/* Parse trsvcid */
 	if (ctx->req.trsvcid) {
@@ -481,11 +491,13 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 		}
 		memcpy(trid.trsvcid, ctx->req.trsvcid, len + 1);
 	}
+	// SPDK_NOTICELOG("[DEBUG] trid.trsvcid: %s\n", trid.trsvcid);
 
 	/* Parse priority for the NVMe-oF transport connection */
 	if (ctx->req.priority) {
 		trid.priority = spdk_strtol(ctx->req.priority, 10);
 	}
+	// SPDK_NOTICELOG("[DEBUG] trid.priority: %d\n", trid.priority);
 
 	/* Parse subnqn */
 	if (ctx->req.subnqn) {
@@ -498,6 +510,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 		}
 		memcpy(trid.subnqn, ctx->req.subnqn, len + 1);
 	}
+	// SPDK_NOTICELOG("[DEBUG] trid.subnqn: %s\n", trid.subnqn);
 
 	if (ctx->req.hostnqn) {
 		maxlen = sizeof(ctx->req.drv_opts.hostnqn);
@@ -509,6 +522,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 		}
 		memcpy(ctx->req.drv_opts.hostnqn, ctx->req.hostnqn, len + 1);
 	}
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.drv_opts.hostnqn: %s\n", ctx->req.drv_opts.hostnqn);
 
 	if (ctx->req.psk) {
 		if (!g_tls_log) {
@@ -516,6 +530,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 			g_tls_log = true;
 		}
 	}
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.psk: %s\n", ctx->req.psk);
 
 	if (ctx->req.hostaddr) {
 		maxlen = sizeof(ctx->req.drv_opts.src_addr);
@@ -527,6 +542,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 		}
 		snprintf(ctx->req.drv_opts.src_addr, maxlen, "%s", ctx->req.hostaddr);
 	}
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.drv_opts.src_addr: %s\n", ctx->req.drv_opts.src_addr);
 
 	if (ctx->req.hostsvcid) {
 		maxlen = sizeof(ctx->req.drv_opts.src_svcid);
@@ -538,10 +554,12 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 		}
 		snprintf(ctx->req.drv_opts.src_svcid, maxlen, "%s", ctx->req.hostsvcid);
 	}
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.drv_opts.src_svcid: %s\n", ctx->req.drv_opts.src_svcid);
 
 	ctrlr = nvme_ctrlr_get_by_name(ctx->req.name);
 
 	if (ctrlr) {
+		// SPDK_NOTICELOG("[DEBUG] Found ctrlr: %s\n", ctx->req.name);
 		/* This controller already exists. Check what the user wants to do. */
 		if (ctx->req.multipath == BDEV_NVME_MP_MODE_DISABLE) {
 			/* The user does not want to do any form of multipathing. */
@@ -600,6 +618,8 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 	if (ctx->req.multipath != BDEV_NVME_MP_MODE_MULTIPATH) {
 		ctx->req.bdev_opts.multipath = false;
 	}
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.multipath: %d\n", ctx->req.multipath);
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.bdev_opts.multipath: %d\n", ctx->req.bdev_opts.multipath);
 
 	if (ctx->req.drv_opts.num_io_queues == 0 || ctx->req.drv_opts.num_io_queues > UINT16_MAX + 1) {
 		spdk_jsonrpc_send_error_response_fmt(request, -EINVAL,
@@ -607,6 +627,7 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 						     1, UINT16_MAX + 1);
 		goto cleanup;
 	}
+	// SPDK_NOTICELOG("[DEBUG] ctx->req.drv_opts.num_io_queues: %d\n", ctx->req.drv_opts.num_io_queues);
 
 	ctx->request = request;
 	/* Should already be zero due to the calloc(), but set explicitly for clarity. */
@@ -614,13 +635,17 @@ rpc_bdev_nvme_attach_controller(struct spdk_jsonrpc_request *request,
 	ctx->req.bdev_opts.psk = ctx->req.psk;
 	ctx->req.bdev_opts.dhchap_key = ctx->req.dhchap_key;
 	ctx->req.bdev_opts.dhchap_ctrlr_key = ctx->req.dhchap_ctrlr_key;
+	SPDK_NOTICELOG("[DEBUG] calling spdk_bdev_nvme_create\n");
 	rc = spdk_bdev_nvme_create(&trid, ctx->req.name, ctx->names, ctx->req.max_bdevs,
 				   rpc_bdev_nvme_attach_controller_done, ctx, &ctx->req.drv_opts,
 				   &ctx->req.bdev_opts);
 	if (rc) {
+		SPDK_NOTICELOG("[DEBUG] spdk_bdev_nvme_create failed: %d\n", rc);
 		spdk_jsonrpc_send_error_response(request, rc, spdk_strerror(-rc));
 		goto cleanup;
 	}
+
+	SPDK_NOTICELOG("[DEBUG] rpc_bdev_nvme_attach_controller: end\n");
 
 	return;
 

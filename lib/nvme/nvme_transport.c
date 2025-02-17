@@ -495,6 +495,7 @@ nvme_transport_connect_qpair_fail(struct spdk_nvme_qpair *qpair, void *unused)
 int
 nvme_transport_ctrlr_connect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk_nvme_qpair *qpair)
 {
+	SPDK_NOTICELOG("[DEBUG][2] starting ctrlr_connect_qpair. qpair->id=%d\n", qpair->id);
 	const struct spdk_nvme_transport *transport = nvme_get_transport(ctrlr->trid.trstring);
 	int rc;
 
@@ -506,27 +507,43 @@ nvme_transport_ctrlr_connect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk_nv
 	qpair->last_transport_failure_reason = qpair->transport_failure_reason;
 	qpair->transport_failure_reason = SPDK_NVME_QPAIR_FAILURE_NONE;
 
+	SPDK_NOTICELOG("[DEBUG][3] setting qpair state to connecting\n");
 	nvme_qpair_set_state(qpair, NVME_QPAIR_CONNECTING);
+	SPDK_NOTICELOG("[DEBUG][3] completed setting qpair state to connecting\n");
+
+	SPDK_NOTICELOG("[DEBUG][4] calling transport->ops.ctrlr_connect_qpair(ctrlr, qpair);\n");
+	// C3Y1: regsitered fd here
 	rc = transport->ops.ctrlr_connect_qpair(ctrlr, qpair);
 	if (rc != 0) {
 		goto err;
 	}
+	SPDK_NOTICELOG("[DEBUG][4] completed transport->ops.ctrlr_connect_qpair(ctrlr, qpair);\n");
 
+	SPDK_NOTICELOG("[DEBUG][5] handling qpair->poll_group if it exists: qpair->poll_group=%p\n", qpair->poll_group);
 	if (qpair->poll_group) {
+		SPDK_NOTICELOG("[DEBUG][5][0] calling nvme_poll_group_connect_qpair\n");
+		// C3Y1: regsitered the same fd here again and failed.
 		rc = nvme_poll_group_connect_qpair(qpair);
 		if (rc) {
+			SPDK_NOTICELOG("[DEBUG][5][0][ERR] nvme_poll_group_connect_qpair failed: rc=%d\n", rc);
 			goto err;
 		}
+		SPDK_NOTICELOG("[DEBUG][5][0] completed nvme_poll_group_connect_qpair\n");
 	}
+	SPDK_NOTICELOG("[DEBUG][5] completed handling qpair->poll_group\n");
 
+	SPDK_NOTICELOG("[DEBUG][6] handling !qpair->async=%d\n", !qpair->async);
 	if (!qpair->async) {
 		/* Busy wait until the qpair exits the connecting state */
+		SPDK_NOTICELOG("[DEBUG] waiting for qpair to exit connecting state\n");
 		while (nvme_qpair_get_state(qpair) == NVME_QPAIR_CONNECTING) {
 			if (qpair->poll_group && spdk_nvme_ctrlr_is_fabrics(ctrlr)) {
+				SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_poll_group_process_completions\n");
 				rc = spdk_nvme_poll_group_process_completions(
 					     qpair->poll_group->group, 0,
 					     nvme_transport_connect_qpair_fail);
 			} else {
+				SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_qpair_process_completions\n");
 				rc = spdk_nvme_qpair_process_completions(qpair, 0);
 			}
 
@@ -534,7 +551,11 @@ nvme_transport_ctrlr_connect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk_nv
 				goto err;
 			}
 		}
+		SPDK_NOTICELOG("[DEBUG] completed waiting for qpair to exit connecting state\n");
 	}
+	SPDK_NOTICELOG("[DEBUG][6] completed handling !qpair->async\n");
+
+	SPDK_NOTICELOG("[DEBUG][2] completed ctrlr_connect_qpair\n");
 
 	return 0;
 err:
@@ -555,6 +576,8 @@ nvme_transport_ctrlr_disconnect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk
 
 	if (nvme_qpair_get_state(qpair) == NVME_QPAIR_DISCONNECTING ||
 	    nvme_qpair_get_state(qpair) == NVME_QPAIR_DISCONNECTED) {
+		SPDK_NOTICELOG("[DEBUG] qpair is %s\n",
+			       nvme_qpair_get_state(qpair) == NVME_QPAIR_DISCONNECTING ? "disconnecting" : "disconnected");
 		return;
 	}
 
@@ -562,10 +585,15 @@ nvme_transport_ctrlr_disconnect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk
 	assert(transport != NULL);
 
 	if (qpair->poll_group && (qpair->active_proc == nvme_ctrlr_get_current_process(ctrlr))) {
+		SPDK_NOTICELOG("[DEBUG] disconnecting qpair, calling nvme_poll_group_disconnect_qpair(qpair);\n");
 		nvme_poll_group_disconnect_qpair(qpair);
+		// Should return?
+		return;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] disconnecting qpair, calling transport->ops.ctrlr_disconnect_qpair(ctrlr, qpair);\n");
 	transport->ops.ctrlr_disconnect_qpair(ctrlr, qpair);
+	SPDK_NOTICELOG("[DEBUG] disconnected qpair\n");
 }
 
 int
@@ -810,9 +838,40 @@ nvme_transport_poll_group_disconnect_qpair(struct spdk_nvme_qpair *qpair)
 
 	if (qpair->poll_group_tailq_head == &tgroup->connected_qpairs) {
 		rc = tgroup->transport->ops.poll_group_disconnect_qpair(qpair);
+		SPDK_NOTICELOG("[DEBUG] asserting rc (%d) == 0\n", rc);
 		assert(rc == 0);
 
 		qpair->poll_group_tailq_head = &tgroup->disconnected_qpairs;
+
+		if (tgroup == NULL) {
+			SPDK_ERRLOG("[DEBUG]tgroup is NULL\n");
+		}
+		if (qpair == NULL) {
+			SPDK_ERRLOG("[DEBUG]qpair is NULL\n");
+		}
+		// Ensure the connected_qpairs list is initialized
+		// why is this list empty?
+		if (STAILQ_EMPTY(&tgroup->connected_qpairs)) {
+		    SPDK_ERRLOG("[DEBUG]The connected_qpairs list is empty, returning\n");
+			// return 0;
+		}
+		if (STAILQ_EMPTY(&tgroup->disconnected_qpairs)) {
+		    SPDK_ERRLOG("[DEBUG]The disconnected_qpairs list is empty\n");
+			// return 0;
+		} else {
+			// Initialize counter
+			int count = 0;
+			struct spdk_nvme_qpair *qpair;
+
+			// Iterate through the list to count the elements
+			STAILQ_FOREACH(qpair, &tgroup->disconnected_qpairs, poll_group_stailq) {
+				count++;
+			}
+
+			// Log the number of elements in the disconnected_qpairs list
+			SPDK_ERRLOG("[DEBUG] There are %d elements in the disconnected_qpairs list\n", count);
+		}
+
 		STAILQ_REMOVE(&tgroup->connected_qpairs, qpair, spdk_nvme_qpair, poll_group_stailq);
 		assert(tgroup->num_connected_qpairs > 0);
 		tgroup->num_connected_qpairs--;

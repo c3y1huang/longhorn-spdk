@@ -173,6 +173,15 @@ _sock_impl_get_opts(struct spdk_sock_impl_opts *opts, struct spdk_sock_impl_opts
 }
 
 static int
+posix_sock_get_fd(struct spdk_sock *sock) {
+	// struct spdk_posix_sock *_posix_sock = (struct spdk_posix_sock *)sock;
+	// SPDK_NOTICELOG("[DEBUG] _posix_sock->fd=%d\n", _posix_sock->fd);
+	struct spdk_posix_sock *posix_sock = __posix_sock(sock);
+	SPDK_NOTICELOG("[DEBUG] posix_sock->fd=%d\n", posix_sock->fd);
+	return posix_sock->fd;
+}
+
+static int
 posix_sock_impl_get_opts(struct spdk_sock_impl_opts *opts, size_t *len)
 {
 	return _sock_impl_get_opts(opts, &g_posix_impl_opts, len);
@@ -1696,9 +1705,12 @@ posix_sock_writev_async(struct spdk_sock *sock, struct spdk_sock_request *req)
 	spdk_sock_request_queue(sock, req);
 
 	/* If there are a sufficient number queued, just flush them out immediately. */
+	SPDK_NOTICELOG("[DEBUG] flush sock if sock->queued_iovcnt (%d) >= IOV_BATCH_SIZE (%d)\n", sock->queued_iovcnt, IOV_BATCH_SIZE);
 	if (sock->queued_iovcnt >= IOV_BATCH_SIZE) {
+		SPDK_NOTICELOG("[DEBUG] flushing sock\n");
 		rc = _sock_flush(sock);
 		if (rc < 0 && errno != EAGAIN) {
+			SPDK_NOTICELOG("[DEBUG] flush sock failed\n");
 			spdk_sock_abort_requests(sock);
 		}
 	}
@@ -1963,6 +1975,7 @@ posix_sock_group_impl_add_sock(struct spdk_sock_group_impl *_group, struct spdk_
 static int
 posix_sock_group_impl_remove_sock(struct spdk_sock_group_impl *_group, struct spdk_sock *_sock)
 {
+	SPDK_NOTICELOG("[DEBUG] posix_sock_group_impl_remove_sock\n");
 	struct spdk_posix_sock_group_impl *group = __posix_group_impl(_group);
 	struct spdk_posix_sock *sock = __posix_sock(_sock);
 	int rc;
@@ -1985,6 +1998,7 @@ posix_sock_group_impl_remove_sock(struct spdk_sock_group_impl *_group, struct sp
 
 	/* Event parameter is ignored but some old kernel version still require it. */
 	rc = epoll_ctl(group->fd, EPOLL_CTL_DEL, sock->fd, &event);
+	printf("[DEBUG ]epoll_ctl failed: %s\n", strerror(errno));
 #elif defined(SPDK_KEVENT)
 	struct kevent event;
 	struct timespec ts = {0};
@@ -1998,6 +2012,7 @@ posix_sock_group_impl_remove_sock(struct spdk_sock_group_impl *_group, struct sp
 	}
 #endif
 
+	SPDK_NOTICELOG("[DEBUG] calling spdk_sock_abort_requests(sock)\n");
 	spdk_sock_abort_requests(_sock);
 
 	return rc;
@@ -2069,6 +2084,7 @@ posix_sock_group_impl_poll(struct spdk_sock_group_impl *_group, int max_events,
 	TAILQ_FOREACH_SAFE(sock, &_group->socks, link, tmp) {
 		rc = _sock_flush(sock);
 		if (rc < 0 && errno != EAGAIN) {
+			SPDK_NOTICELOG("[DEBUG] calling spdk_sock_abort_requests(sock)\n");
 			spdk_sock_abort_requests(sock);
 		}
 	}
@@ -2264,6 +2280,7 @@ static struct spdk_net_impl g_posix_net_impl = {
 	.group_impl_close	= posix_sock_group_impl_close,
 	.get_opts	= posix_sock_impl_get_opts,
 	.set_opts	= posix_sock_impl_set_opts,
+	.get_fd 	= posix_sock_get_fd,
 };
 
 SPDK_NET_IMPL_REGISTER_DEFAULT(posix, &g_posix_net_impl);

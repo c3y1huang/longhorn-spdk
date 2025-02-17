@@ -2822,6 +2822,7 @@ thread_interrupt_create(struct spdk_thread *thread)
 	spdk_fd_group_get_default_event_handler_opts(&opts, sizeof(opts));
 	opts.fd_type = SPDK_FD_TYPE_EVENTFD;
 
+	SPDK_NOTICELOG("[DEBUG] calling SPDK_FD_GROUP_ADD_EXT, thread->msg_fd=%d\n", thread->msg_fd);
 	return SPDK_FD_GROUP_ADD_EXT(thread->fgrp, thread->msg_fd,
 				     thread_interrupt_msg_process, thread, &opts);
 }
