@@ -6486,7 +6486,8 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 	ctx->drv_opts.transport_tos = g_opts.transport_tos;
 
 	if (spdk_interrupt_mode_is_enabled()) {
-		if (trid->trtype == SPDK_NVME_TRANSPORT_PCIE) {
+		if (trid->trtype == SPDK_NVME_TRANSPORT_PCIE ||
+		    trid->trtype == SPDK_NVME_TRANSPORT_TCP) {
 			ctx->drv_opts.enable_interrupts = true;
 		} else {
 			SPDK_ERRLOG("Interrupt mode is only supported with PCIe transport\n");

@@ -2752,6 +2752,69 @@ nvme_tcp_ctrlr_get_max_sges(struct spdk_nvme_ctrlr *ctrlr)
 }
 
 static int
+nvme_tcp_ctrlr_enable_interrupts(struct spdk_nvme_ctrlr *ctrlr)
+{
+	SPDK_NOTICELOG("[DEBUG] %s\n", __func__);
+
+	if (!ctrlr) {
+		SPDK_ERRLOG("ctrlr is NULL\n");
+		return -EINVAL;
+	}
+
+	struct nvme_tcp_ctrlr *tctrlr = nvme_tcp_ctrlr(ctrlr);
+	struct nvme_tcp_qpair *tqpair = nvme_tcp_qpair(tctrlr->ctrlr.adminq);
+
+	int fd, epfd, rc;
+	fd = spdk_get_sock_fd(tqpair->sock);
+
+	// /* Allocate an I/O qpair. */
+	// qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, 0);
+	// if (!qpair) {
+	// 	SPDK_ERRLOG("failed to allocate qpair\n");
+	// 	return -ENOMEM;
+	// }
+
+	// /* Retrieve the file descriptor associated with this qpair. */
+	// fd = spdk_nvme_qpair_get_fd(qpair, NULL);
+	// if (fd < 0) {
+	// 	SPDK_ERRLOG("Failed to get NVMe qpair fd\n");
+	// 	return -EINVAL;
+	// }
+
+	/* Create an epoll instance. */
+	epfd = epoll_create1(0);
+	if (epfd < 0) {
+		SPDK_ERRLOG("Failed to create epoll instance\n");
+		return -1;
+	}
+
+	/* Register the qpair fd with epoll */
+	struct epoll_event epevent = {0};
+	epevent.events = EPOLLIN | EPOLLET;
+	epevent.data.fd = fd;
+	rc = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &epevent);
+	if (rc < 0) {
+		SPDK_ERRLOG("epoll_ctl failed\n");
+		close(epfd);
+		return -1;
+	}
+
+	/* Set the epoll fd in the ctrlr. */
+	// struct spdk_nvme_transport_poll_group *tgroup = nvme_tcp_poll_group(tqpair->qpair.poll_group);
+	SPDK_FD_GROUP_ADD_EXT(tqpair->qpair.poll_group, epfd, NULL, NULL, NULL);
+	// SPDK_FD_GROUP_ADD_EXT()(tctrlr->fgrp, epfd, NULL, NULL, NULL);
+	// ctrlr->epfd = epfd;
+
+	/* Free the qpair. */
+	// spdk_nvme_qpair_free(qpair);
+
+	/* Return success. */
+	SPDK_NOTICELOG("[DEBUG] Interrupts enabled for NVMe TCP controller\n");
+
+	return 0;
+}
+
+static int
 nvme_tcp_qpair_iterate_requests(struct spdk_nvme_qpair *qpair,
 				int (*iter_fn)(struct nvme_request *req, void *arg),
 				void *arg)
@@ -2977,6 +3040,14 @@ static void
 nvme_tcp_poll_group_check_disconnected_qpairs(struct spdk_nvme_transport_poll_group *tgroup,
 		spdk_nvme_disconnected_qpair_cb disconnected_qpair_cb)
 {
+	// TODO[c3y1huang]: implement this function
+	SPDK_NOTICELOG("[DEBUG] %s disconnect qpair.\n", __func__);
+
+	struct spdk_nvme_qpair *qpair, *tmp_qpair;
+
+	STAILQ_FOREACH_SAFE(qpair, &tgroup->disconnected_qpairs, poll_group_stailq, tmp_qpair) {
+		disconnected_qpair_cb(qpair, tgroup->group->ctx);
+	}
 }
 
 static int
@@ -3052,6 +3123,7 @@ const struct spdk_nvme_transport_ops tcp_ops = {
 	.ctrlr_scan = nvme_fabric_ctrlr_scan,
 	.ctrlr_destruct = nvme_tcp_ctrlr_destruct,
 	.ctrlr_enable = nvme_tcp_ctrlr_enable,
+	.ctrlr_enable_interrupts = nvme_tcp_ctrlr_enable_interrupts,
 
 	.ctrlr_set_reg_4 = nvme_fabric_ctrlr_set_reg_4,
 	.ctrlr_set_reg_8 = nvme_fabric_ctrlr_set_reg_8,
