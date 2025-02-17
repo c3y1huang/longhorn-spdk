@@ -3546,6 +3546,7 @@ bdev_nvme_io_type_supported(void *ctx, enum spdk_bdev_io_type io_type)
 static int
 nvme_qpair_create(struct nvme_ctrlr *nvme_ctrlr, struct nvme_ctrlr_channel *ctrlr_ch)
 {
+	SPDK_NOTICELOG("[DEBUG] nvme_qpair_create\n");
 	struct nvme_qpair *nvme_qpair;
 	struct spdk_io_channel *pg_ch;
 	int rc;
@@ -3575,7 +3576,9 @@ nvme_qpair_create(struct nvme_ctrlr *nvme_ctrlr, struct nvme_ctrlr_channel *ctrl
 	nvme_qpair->group->collect_spin_stat = false;
 #endif
 
+	SPDK_NOTICELOG("[DEBUG] attempt to create qpair\n");
 	if (!nvme_ctrlr->disabled) {
+		SPDK_NOTICELOG("[DEBUG] nvme_ctrlr is not disabled, calling bdev_nvme_create_qpair\n");
 		/* If a nvme_ctrlr is disabled, don't try to create qpair for it. Qpair will
 		 * be created when it's enabled.
 		 */
@@ -5955,11 +5958,14 @@ nvme_ctrlr_create(struct spdk_nvme_ctrlr *ctrlr,
 	if (spdk_interrupt_mode_is_enabled()) {
 		spdk_poller_register_interrupt(nvme_ctrlr->adminq_timer_poller, NULL, NULL);
 
+		SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_ctrlr_get_admin_qp_fd\n");
 		fd = spdk_nvme_ctrlr_get_admin_qp_fd(nvme_ctrlr->ctrlr, &opts);
 		if (fd < 0) {
+			SPDK_NOTICELOG("[DEBUG] spdk_nvme_ctrlr_get_admin_qp_fd failed: %d\n", fd);
 			rc = fd;
 			goto err;
 		}
+		SPDK_NOTICELOG("[DEBUG] spdk_nvme_ctrlr_get_admin_qp_fd is successful\n");
 
 		nvme_ctrlr->intr = SPDK_INTERRUPT_REGISTER_EXT(fd, bdev_nvme_poll_adminq,
 				   nvme_ctrlr, &opts);
@@ -5986,10 +5992,13 @@ nvme_ctrlr_create(struct spdk_nvme_ctrlr *ctrlr,
 		nvme_ctrlr->opal_dev = spdk_opal_dev_construct(ctrlr);
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling nvme_bdev_ctrlr_create\n");
 	rc = nvme_bdev_ctrlr_create(name, nvme_ctrlr);
 	if (rc != 0) {
+		SPDK_NOTICELOG("[DEBUG] nvme_bdev_ctrlr_create failed: %d\n", rc);
 		goto err;
 	}
+	SPDK_NOTICELOG("[DEBUG] nvme_bdev_ctrlr_create is done\n");
 
 	cdata = spdk_nvme_ctrlr_get_data(ctrlr);
 
@@ -5999,6 +6008,7 @@ nvme_ctrlr_create(struct spdk_nvme_ctrlr *ctrlr,
 			return 0;
 		}
 	} else {
+		SPDK_NOTICELOG("[DEBUG][nvme_ctrlr_create] calling nvme_ctrlr_create_done\n");
 		nvme_ctrlr_create_done(nvme_ctrlr, ctx);
 		return 0;
 	}
@@ -6558,11 +6568,14 @@ connect_attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
 	ctx = SPDK_CONTAINEROF(user_opts, struct nvme_async_probe_ctx, drv_opts);
 	ctx->ctrlr_attached = true;
 
+	SPDK_NOTICELOG("[DEBUG][connect_attach_cb] calling nvme_ctrlr_create\n");
 	rc = nvme_ctrlr_create(ctrlr, ctx->base_name, &ctx->trid, ctx);
 	if (rc != 0) {
+		SPDK_NOTICELOG("[DEBUG][connect_attach_cb] nvme_ctrlr_create failed: rc=%d\n", rc);
 		ctx->reported_bdevs = 0;
 		populate_namespaces_cb(ctx, rc);
 	}
+	SPDK_NOTICELOG("[DEBUG][connect_attach_cb] nvme_ctrlr_create done\n");
 }
 
 
@@ -6739,11 +6752,13 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 	ctx->drv_opts.transport_tos = g_opts.transport_tos;
 
 	if (spdk_interrupt_mode_is_enabled()) {
-		if (trid->trtype == SPDK_NVME_TRANSPORT_PCIE) {
+		if (trid->trtype == SPDK_NVME_TRANSPORT_PCIE ||
+		    trid->trtype == SPDK_NVME_TRANSPORT_TCP) {
 			ctx->drv_opts.enable_interrupts = true;
 		} else {
 			SPDK_ERRLOG("Interrupt mode is only supported with PCIe transport\n");
 			free_nvme_async_probe_ctx(ctx);
+			SPDK_NOTICELOG("[DEBUG] return -ENOTSUP\n");
 			return -ENOTSUP;
 		}
 	}
@@ -6781,8 +6796,10 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 	}
 
 	if (nvme_bdev_ctrlr_get_by_name(base_name) == NULL || ctx->bdev_opts.multipath) {
+		SPDK_NOTICELOG("[DEBUG] connect_attach_cb\n");
 		attach_cb = connect_attach_cb;
 	} else {
+		SPDK_NOTICELOG("[DEBUG] connect_set_failover_cb\n");
 		attach_cb = connect_set_failover_cb;
 	}
 
@@ -6802,8 +6819,10 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 		free_nvme_async_probe_ctx(ctx);
 		return -ENODEV;
 	}
+	SPDK_NOTICELOG("[DEBUG] SPDK_POLLER_REGISTER");
 	ctx->poller = SPDK_POLLER_REGISTER(bdev_nvme_async_poll, ctx, 1000);
 
+    SPDK_NOTICELOG("[DEBUG] spdk_bdev_nvme_create succeeded\n");
 	return 0;
 }
 

@@ -440,6 +440,7 @@ int
 spdk_nvme_ctrlr_get_admin_qp_fd(struct spdk_nvme_ctrlr *ctrlr,
 				struct spdk_event_handler_opts *opts)
 {
+	SPDK_NOTICELOG("[DEBUG] calling spdk_nvme_qpair_get_fd\n");
 	return spdk_nvme_qpair_get_fd(ctrlr->adminq, opts);
 }
 
@@ -4289,7 +4290,8 @@ nvme_ctrlr_construct(struct spdk_nvme_ctrlr *ctrlr)
 {
 	int rc;
 
-	if (ctrlr->trid.trtype == SPDK_NVME_TRANSPORT_PCIE) {
+	// Not sure if this is required for TCP transport.
+	if (ctrlr->trid.trtype == SPDK_NVME_TRANSPORT_PCIE || ctrlr->trid.trtype == SPDK_NVME_TRANSPORT_TCP) {
 		nvme_ctrlr_set_state(ctrlr, NVME_CTRLR_STATE_INIT_DELAY, NVME_TIMEOUT_INFINITE);
 	} else {
 		nvme_ctrlr_set_state(ctrlr, NVME_CTRLR_STATE_INIT, NVME_TIMEOUT_INFINITE);

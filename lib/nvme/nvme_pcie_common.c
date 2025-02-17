@@ -1607,8 +1607,8 @@ typedef int(*build_req_fn)(struct spdk_nvme_qpair *, struct nvme_request *, stru
 
 static build_req_fn const g_nvme_pcie_build_req_table[][2] = {
 	[NVME_PAYLOAD_TYPE_INVALID] = {
-		nvme_pcie_qpair_build_request_invalid,			/* PRP */
-		nvme_pcie_qpair_build_request_invalid			/* SGL */
+		nvme_pcie_qpair_build_request_invalid,			/* PRP Physical Region Page*/
+		nvme_pcie_qpair_build_request_invalid			/* SGL Scatter-Gather List*/
 	},
 	[NVME_PAYLOAD_TYPE_CONTIG] = {
 		nvme_pcie_qpair_build_contig_request,			/* PRP */

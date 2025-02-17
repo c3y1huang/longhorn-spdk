@@ -555,6 +555,8 @@ nvme_transport_ctrlr_disconnect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk
 
 	if (nvme_qpair_get_state(qpair) == NVME_QPAIR_DISCONNECTING ||
 	    nvme_qpair_get_state(qpair) == NVME_QPAIR_DISCONNECTED) {
+		SPDK_NOTICELOG("[DEBUG] qpair is %s\n",
+			       nvme_qpair_get_state(qpair) == NVME_QPAIR_DISCONNECTING ? "disconnecting" : "disconnected");
 		return;
 	}
 
@@ -562,10 +564,15 @@ nvme_transport_ctrlr_disconnect_qpair(struct spdk_nvme_ctrlr *ctrlr, struct spdk
 	assert(transport != NULL);
 
 	if (qpair->poll_group && (qpair->active_proc == nvme_ctrlr_get_current_process(ctrlr))) {
+		SPDK_NOTICELOG("[DEBUG] disconnecting qpair, calling nvme_poll_group_disconnect_qpair(qpair);\n");
 		nvme_poll_group_disconnect_qpair(qpair);
+		// Should return?
+		return;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] disconnecting qpair, calling transport->ops.ctrlr_disconnect_qpair(ctrlr, qpair);\n");
 	transport->ops.ctrlr_disconnect_qpair(ctrlr, qpair);
+	SPDK_NOTICELOG("[DEBUG] disconnected qpair\n");
 }
 
 int
@@ -813,6 +820,36 @@ nvme_transport_poll_group_disconnect_qpair(struct spdk_nvme_qpair *qpair)
 		assert(rc == 0);
 
 		qpair->poll_group_tailq_head = &tgroup->disconnected_qpairs;
+
+		if (tgroup == NULL) {
+			SPDK_ERRLOG("[DEBUG]tgroup is NULL\n");
+		}
+		if (qpair == NULL) {
+			SPDK_ERRLOG("[DEBUG]qpair is NULL\n");
+		}
+		// Ensure the connected_qpairs list is initialized
+		// why is this list empty?
+		if (STAILQ_EMPTY(&tgroup->connected_qpairs)) {
+		    SPDK_ERRLOG("[DEBUG]The connected_qpairs list is empty\n");
+			// return 0;
+		}
+		if (STAILQ_EMPTY(&tgroup->disconnected_qpairs)) {
+		    SPDK_ERRLOG("[DEBUG]The disconnected_qpairs list is empty\n");
+			// return 0;
+		} else {
+			// Initialize counter
+			int count = 0;
+			struct spdk_nvme_qpair *qpair;
+
+			// Iterate through the list to count the elements
+			STAILQ_FOREACH(qpair, &tgroup->disconnected_qpairs, poll_group_stailq) {
+				count++;
+			}
+
+			// Log the number of elements in the disconnected_qpairs list
+			SPDK_ERRLOG("[DEBUG] There are %d elements in the disconnected_qpairs list\n", count);
+		}
+
 		STAILQ_REMOVE(&tgroup->connected_qpairs, qpair, spdk_nvme_qpair, poll_group_stailq);
 		assert(tgroup->num_connected_qpairs > 0);
 		tgroup->num_connected_qpairs--;
