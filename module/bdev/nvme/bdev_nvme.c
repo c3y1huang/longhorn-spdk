@@ -6492,10 +6492,14 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 		} else {
 			SPDK_ERRLOG("Interrupt mode is only supported with PCIe transport\n");
 			free_nvme_async_probe_ctx(ctx);
+			SPDK_NOTICELOG("[DEBUG] return -ENOTSUP\n");
 			return -ENOTSUP;
 		}
+
+		SPDK_NOTICELOG("[DEBUG] Interrupt mode is enabled: %s\n", trid->trtype);
 	}
 
+	SPDK_NOTICELOG("[DEBUG] ctx->bdev_opts.psk: %s\n", ctx->bdev_opts.psk);
 	if (ctx->bdev_opts.psk != NULL) {
 		ctx->drv_opts.tls_psk = spdk_keyring_get_key(ctx->bdev_opts.psk);
 		if (ctx->drv_opts.tls_psk == NULL) {
@@ -6505,6 +6509,7 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 		}
 	}
 
+	SPDK_NOTICELOG("[DEBUG] ctx->bdev_opts.dhchap_key: %s\n", ctx->bdev_opts.dhchap_key);
 	if (ctx->bdev_opts.dhchap_key != NULL) {
 		ctx->drv_opts.dhchap_key = spdk_keyring_get_key(ctx->bdev_opts.dhchap_key);
 		if (ctx->drv_opts.dhchap_key == NULL) {
@@ -6517,6 +6522,7 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 		ctx->drv_opts.dhchap_digests = g_opts.dhchap_digests;
 		ctx->drv_opts.dhchap_dhgroups = g_opts.dhchap_dhgroups;
 	}
+	SPDK_NOTICELOG("[DEBUG] ctx->bdev_opts.dhchap_ctrlr_key: %s\n", ctx->bdev_opts.dhchap_ctrlr_key);
 	if (ctx->bdev_opts.dhchap_ctrlr_key != NULL) {
 		ctx->drv_opts.dhchap_ctrlr_key =
 			spdk_keyring_get_key(ctx->bdev_opts.dhchap_ctrlr_key);
@@ -6528,20 +6534,26 @@ spdk_bdev_nvme_create(struct spdk_nvme_transport_id *trid,
 		}
 	}
 
+	SPDK_NOTICELOG("[DEBUG] nvme_bdev_ctrlr_get_by_name(base_name): %s\n", base_name);
 	if (nvme_bdev_ctrlr_get_by_name(base_name) == NULL || multipath) {
+		SPDK_NOTICELOG("[DEBUG] connect_attach_cb\n");
 		attach_cb = connect_attach_cb;
 	} else {
+		SPDK_NOTICELOG("[DEBUG] connect_set_failover_cb\n");
 		attach_cb = connect_set_failover_cb;
 	}
 
+	SPDK_NOTICELOG("[DEBUG] spdk_nvme_connect_async\n");
 	ctx->probe_ctx = spdk_nvme_connect_async(trid, &ctx->drv_opts, attach_cb);
 	if (ctx->probe_ctx == NULL) {
 		SPDK_ERRLOG("No controller was found with provided trid (traddr: %s)\n", trid->traddr);
 		free_nvme_async_probe_ctx(ctx);
 		return -ENODEV;
 	}
+	SPDK_NOTICELOG("[DEBUG] SPDK_POLLER_REGISTER");
 	ctx->poller = SPDK_POLLER_REGISTER(bdev_nvme_async_poll, ctx, 1000);
 
+    SPDK_NOTICELOG("[DEBUG] return 0\n");
 	return 0;
 }
 
