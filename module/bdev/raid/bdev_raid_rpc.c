@@ -260,6 +260,8 @@ static void
 rpc_bdev_raid_create(struct spdk_jsonrpc_request *request,
 		     const struct spdk_json_val *params)
 {
+	SPDK_NOTICELOG("[DEBUG]>>> rpc_bdev_raid_create\n");
+
 	struct rpc_bdev_raid_create	*req;
 	struct raid_bdev		*raid_bdev;
 	int				rc;
@@ -292,6 +294,7 @@ rpc_bdev_raid_create(struct spdk_jsonrpc_request *request,
 		}
 	}
 
+	SPDK_NOTICELOG("[DEBUG] calling raid_bdev_create\n");
 	rc = raid_bdev_create(req->name, req->strip_size_kb, num_base_bdevs,
 			      req->level, req->superblock_enabled, &req->uuid,
 			      req->delta_bitmap_enabled, &raid_bdev);
@@ -308,9 +311,11 @@ rpc_bdev_raid_create(struct spdk_jsonrpc_request *request,
 
 	assert(num_base_bdevs > 0);
 
+	SPDK_NOTICELOG("[DEBUG] handling num_base_bdevs = %d\n", req->name, num_base_bdevs);
 	for (i = 0; i < num_base_bdevs; i++) {
 		const char *base_bdev_name = req->base_bdevs.base_bdevs[i];
 
+		SPDK_NOTICELOG("[DEBUG] adding base bdev %s to raid bdev %s\n", base_bdev_name, req->name);
 		rc = raid_bdev_add_base_bdev(raid_bdev, base_bdev_name,
 					     rpc_bdev_raid_create_add_base_bdev_cb, ctx);
 		if (rc == -ENODEV) {
@@ -325,6 +330,7 @@ rpc_bdev_raid_create(struct spdk_jsonrpc_request *request,
 			break;
 		}
 	}
+	SPDK_NOTICELOG("[DEBUG]<<< rpc_bdev_raid_create\n");
 	return;
 cleanup:
 	free_rpc_bdev_raid_create_ctx(ctx);

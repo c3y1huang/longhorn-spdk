@@ -172,23 +172,23 @@ nvmf_ctrlr_keep_alive_poll(void *ctx)
 	keep_alive_timeout_tick = ctrlr->last_keep_alive_tick +
 				  ctrlr->feat.keep_alive_timer.bits.kato * spdk_get_ticks_hz() / UINT64_C(1000);
 	if (now > keep_alive_timeout_tick) {
-		SPDK_NOTICELOG("Disconnecting host %s from subsystem %s due to keep alive timeout.\n",
+		SPDK_NOTICELOG("[DEBUG] Disconnecting host %s from subsystem %s due to keep alive timeout.\n",
 			       ctrlr->hostnqn, ctrlr->subsys->subnqn);
-		/* set the Controller Fatal Status bit to '1' */
-		if (ctrlr->vcprop.csts.bits.cfs == 0) {
-			nvmf_ctrlr_set_fatal_status(ctrlr);
+		// /* set the Controller Fatal Status bit to '1' */
+		// if (ctrlr->vcprop.csts.bits.cfs == 0) {
+		// 	nvmf_ctrlr_set_fatal_status(ctrlr);
 
-			/*
-			 * disconnect qpairs, terminate Transport connection
-			 * destroy ctrlr, break the host to controller association
-			 * disconnect qpairs with qpair->ctrlr == ctrlr
-			 */
-			spdk_for_each_channel(ctrlr->subsys->tgt,
-					      nvmf_ctrlr_disconnect_qpairs_on_pg,
-					      ctrlr,
-					      nvmf_ctrlr_disconnect_qpairs_done);
-			return SPDK_POLLER_BUSY;
-		}
+		// 	/*
+		// 	 * disconnect qpairs, terminate Transport connection
+		// 	 * destroy ctrlr, break the host to controller association
+		// 	 * disconnect qpairs with qpair->ctrlr == ctrlr
+		// 	 */
+		// 	spdk_for_each_channel(ctrlr->subsys->tgt,
+		// 			      nvmf_ctrlr_disconnect_qpairs_on_pg,
+		// 			      ctrlr,
+		// 			      nvmf_ctrlr_disconnect_qpairs_done);
+		// 	return SPDK_POLLER_BUSY;
+		// }
 	}
 
 	return SPDK_POLLER_IDLE;
