@@ -5054,7 +5054,6 @@ spdk_bdev_alias_del_all(struct spdk_bdev *bdev)
 struct spdk_io_channel *
 spdk_bdev_get_io_channel(struct spdk_bdev_desc *desc)
 {
-	SPDK_NOTICELOG("[DEBUG]>>> spdk_bdev_get_io_channel\n");
 	return spdk_get_io_channel(__bdev_to_io_dev(spdk_bdev_desc_get_bdev(desc)));
 }
 

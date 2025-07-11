@@ -3782,7 +3782,6 @@ static int
 raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existing,
 			      raid_base_bdev_cb cb_fn, void *cb_ctx)
 {
-	SPDK_NOTICELOG("[DEBUG]>>> raid_bdev_configure_base_bdev\n");
 	struct raid_bdev *raid_bdev = base_info->raid_bdev;
 	struct spdk_bdev_desc *desc;
 	struct spdk_bdev *bdev;
@@ -3797,9 +3796,7 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 	 * before claiming the bdev.
 	 */
 
-	 SPDK_NOTICELOG("[DEBUG] checking if base_info->name == NULL\n");
 	if (!spdk_uuid_is_null(&base_info->uuid)) {
-		SPDK_NOTICELOG("[DEBUG] no, base_info->name != NULL\n");
 		char uuid_str[SPDK_UUID_STRING_LEN];
 		const char *bdev_name;
 
@@ -3815,7 +3812,6 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 
 		if (base_info->name == NULL) {
 			assert(existing == true);
-			SPDK_NOTICELOG("[DEBUG] base_info->name == %s\n", bdev_name);
 			base_info->name = strdup(bdev_name);
 			if (base_info->name == NULL) {
 				return -ENOMEM;
@@ -3829,7 +3825,6 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 
 	assert(base_info->name != NULL);
 
-	SPDK_NOTICELOG("[DEBUG] calling spdk_bdev_open_ext\n");
 	rc = spdk_bdev_open_ext(base_info->name, true, raid_bdev_event_base_bdev, NULL, &desc);
 	if (rc != 0) {
 		if (rc != -ENODEV) {
@@ -3849,7 +3844,6 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 		return -EINVAL;
 	}
 
-	SPDK_NOTICELOG("[DEBUG] calling spdk_bdev_module_claim_bdev\n");
 	rc = spdk_bdev_module_claim_bdev(bdev, NULL, &g_raid_if);
 	if (rc != 0) {
 		SPDK_ERRLOG("Unable to claim this bdev as it is already claimed\n");
@@ -3859,7 +3853,6 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 
 	SPDK_DEBUGLOG(bdev_raid, "bdev %s is claimed\n", bdev->name);
 
-	SPDK_NOTICELOG("[DEBUG] setting base_info->app_thread_ch\n");
 	base_info->app_thread_ch = spdk_bdev_get_io_channel(desc);
 	if (base_info->app_thread_ch == NULL) {
 		SPDK_ERRLOG("Failed to get io channel\n");
@@ -3871,9 +3864,7 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 	base_info->desc = desc;
 	base_info->blockcnt = bdev->blockcnt;
 
-	SPDK_NOTICELOG("[DEBUG] checking if raid_bdev->superblock_enabled\n");
 	if (raid_bdev->superblock_enabled) {
-		SPDK_NOTICELOG("[DEBUG] yes, raid_bdev->superblock_enabled\n");
 		uint64_t data_offset;
 
 		if (base_info->data_offset == 0) {
@@ -3956,14 +3947,9 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 	base_info->configure_cb = cb_fn;
 	base_info->configure_cb_ctx = cb_ctx;
 
-	SPDK_NOTICELOG("[DEBUG] checking if existing == true\n");
 	if (existing) {
-		SPDK_NOTICELOG("[DEBUG] yes, existing == true\n");
-		SPDK_NOTICELOG("[DEBUG] calling raid_bdev_configure_base_bdev_cont\n");
 		raid_bdev_configure_base_bdev_cont(base_info);
 	} else {
-		SPDK_NOTICELOG("[DEBUG] no, existing == false\n");
-		SPDK_NOTICELOG("[DEBUG] calling raid_bdev_load_base_bdev_superblock\n");
 		/* check for existing superblock when using a new bdev */
 		rc = raid_bdev_load_base_bdev_superblock(desc, base_info->app_thread_ch,
 				raid_bdev_configure_base_bdev_check_sb_cb, base_info);
@@ -3972,7 +3958,6 @@ raid_bdev_configure_base_bdev(struct raid_base_bdev_info *base_info, bool existi
 				    bdev->name, spdk_strerror(-rc));
 		}
 	}
-	SPDK_NOTICELOG("[DEBUG]<<< raid_bdev_configure_base_bdev\n");
 out:
 	if (rc != 0) {
 		base_info->configure_cb = NULL;
@@ -3985,7 +3970,6 @@ int
 raid_bdev_add_base_bdev(struct raid_bdev *raid_bdev, const char *name,
 			raid_base_bdev_cb cb_fn, void *cb_ctx)
 {
-	SPDK_NOTICELOG("[DEBUG]>>> raid_bdev_add_base_bdev\n");
 	struct raid_base_bdev_info *base_info = NULL, *iter;
 	int rc;
 
@@ -3998,9 +3982,7 @@ raid_bdev_add_base_bdev(struct raid_bdev *raid_bdev, const char *name,
 		return -EPERM;
 	}
 
-	SPDK_NOTICELOG("[DEBUG] checking if raid_bdev->state == RAID_BDEV_STATE_CONFIGURING\n");
 	if (raid_bdev->state == RAID_BDEV_STATE_CONFIGURING) {
-		SPDK_NOTICELOG("[DEBUG] yes, raid_bdev->state == RAID_BDEV_STATE_CONFIGURING\n");
 		struct spdk_bdev *bdev = spdk_bdev_get_by_name(name);
 
 		if (bdev != NULL) {
@@ -4014,14 +3996,9 @@ raid_bdev_add_base_bdev(struct raid_bdev *raid_bdev, const char *name,
 		}
 	}
 
-	SPDK_NOTICELOG("[DEBUG] checking if base_info == NULL || raid_bdev->state == RAID_BDEV_STATE_ONLINE\n");
 	if (base_info == NULL || raid_bdev->state == RAID_BDEV_STATE_ONLINE) {
-		SPDK_NOTICELOG("[DEBUG] yes, base_info == NULL || raid_bdev->state == RAID_BDEV_STATE_ONLINE\n");
-
-		SPDK_NOTICELOG("[DEBUG] finding empty slot in raid_bdev->base_bdev_info\n");
 		RAID_FOR_EACH_BASE_BDEV(raid_bdev, iter) {
 			if (iter->name == NULL && spdk_uuid_is_null(&iter->uuid) && iter->state == BASE_BDEV_STATE_NONE) {
-				SPDK_NOTICELOG("[DEBUG] found empty slot in raid_bdev->base_bdev_info\n");
 				base_info = iter;
 				break;
 			}
@@ -4043,20 +4020,16 @@ raid_bdev_add_base_bdev(struct raid_bdev *raid_bdev, const char *name,
 
 	assert(base_info->is_configured == false);
 
-	SPDK_NOTICELOG("[DEBUG] checking if raid_bdev->state == RAID_BDEV_STATE_ONLINE\n");
 	if (raid_bdev->state == RAID_BDEV_STATE_ONLINE) {
-		SPDK_NOTICELOG("[DEBUG] yes, raid_bdev->state == RAID_BDEV_STATE_ONLINE\n");
 		assert(base_info->data_size != 0);
 		assert(base_info->desc == NULL);
 	}
 
-	SPDK_NOTICELOG("[DEBUG] setting base_info->name: %s\n", name);
 	base_info->name = strdup(name);
 	if (base_info->name == NULL) {
 		return -ENOMEM;
 	}
 
-	SPDK_NOTICELOG("[DEBUG] calling raid_bdev_configure_base_bdev\n");
 	rc = raid_bdev_configure_base_bdev(base_info, false, cb_fn, cb_ctx);
 	if (rc != 0 && (rc != -ENODEV || raid_bdev->state != RAID_BDEV_STATE_CONFIGURING)) {
 		SPDK_ERRLOG("base bdev '%s' configure failed: %s\n", name, spdk_strerror(-rc));
@@ -4064,7 +4037,6 @@ raid_bdev_add_base_bdev(struct raid_bdev *raid_bdev, const char *name,
 		base_info->name = NULL;
 	}
 
-	SPDK_NOTICELOG("[DEBUG]<<< raid_bdev_add_base_bdev\n");
 	return rc;
 }
 
