@@ -2775,13 +2775,10 @@ nvme_tcp_admin_qpair_abort_aers(struct spdk_nvme_qpair *qpair)
 	}
 }
 
-static int nvme_tcp_poll_group_intr(void *ctx);
-
 static struct spdk_nvme_transport_poll_group *
 nvme_tcp_poll_group_create(void)
 {
 	struct nvme_tcp_poll_group *group = calloc(1, sizeof(*group));
-	int rc;
 
 	if (group == NULL) {
 		SPDK_ERRLOG("Unable to allocate poll group.\n");
@@ -2798,44 +2795,7 @@ nvme_tcp_poll_group_create(void)
 		return NULL;
 	}
 
-	if (spdk_interrupt_mode_is_enabled()) {
-		rc = SPDK_SOCK_GROUP_REGISTER_INTERRUPT(group->sock_group,
-							SPDK_INTERRUPT_EVENT_IN | SPDK_INTERRUPT_EVENT_OUT,
-							nvme_tcp_poll_group_intr,
-							&group->group);
-		if (rc != 0) {
-			free(group);
-			SPDK_ERRLOG("Failed to register the socket group for interrup-driven events\n");
-			return NULL;
-		}
-	}
-
 	return &group->group;
-}
-
-static int
-nvme_tcp_poll_group_poll(struct spdk_nvme_transport_poll_group *tgroup)
-{
-	struct nvme_tcp_poll_group *group = nvme_tcp_poll_group(tgroup);
-	int num_events;
-
-	num_events = spdk_sock_group_poll(group->sock_group);
-	if (spdk_unlikely(num_events < 0)) {
-		SPDK_ERRLOG("Failed to poll sock_group=%p\n", group->sock_group);
-	}
-
-	return num_events;
-}
-
-static int
-nvme_tcp_poll_group_intr(void *ctx)
-{
-	struct spdk_nvme_transport_poll_group *tgroup = ctx;
-	int ret = 0;
-
-	ret = nvme_tcp_poll_group_poll(tgroup);
-
-	return ret != 0 ? SPDK_POLLER_BUSY : SPDK_POLLER_IDLE;
 }
 
 static struct spdk_nvme_transport_poll_group *

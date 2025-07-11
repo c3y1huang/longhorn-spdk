@@ -38,8 +38,6 @@ DEFINE_STUB(spdk_sock_group_get_ctx,
 	    void *,
 	    (struct spdk_sock_group *group),
 	    NULL);
-DEFINE_STUB(spdk_sock_group_register_interrupt, int, (struct spdk_sock_group *group,
-		uint32_t events, spdk_interrupt_fn fn, void *arg, const char *name), 0);
 DEFINE_STUB(spdk_sock_get_numa_id, int32_t, (struct spdk_sock *sock), SPDK_ENV_NUMA_ID_ANY);
 DEFINE_STUB(spdk_get_sock_fd, int, (struct spdk_sock *sock), 0);
 
