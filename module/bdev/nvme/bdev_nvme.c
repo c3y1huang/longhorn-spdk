@@ -3804,7 +3804,7 @@ bdev_nvme_create_poll_group_cb(void *io_device, void *ctx_buf)
 		 * the OS stack, we poll periodically to ensure timely processing of IO
 		 * commands.
 		 */
-		period = 1000;
+		period = 100;
 	}
 	group->poller = SPDK_POLLER_REGISTER(bdev_nvme_poll, group, period);
 
