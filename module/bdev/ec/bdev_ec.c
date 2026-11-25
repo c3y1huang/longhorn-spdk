@@ -2031,12 +2031,18 @@ ec_write_rebuild_progress_json(struct spdk_json_write_ctx *w,
 			       const struct ec_bdev *ec)
 {
 	const struct ec_rebuild_ctx *rctx = ec->rebuild_ctx;
+	uint64_t total_stripes = rctx->num_stripes * (uint64_t)rctx->slots_to_rebuild;
+	uint32_t percent = total_stripes > 0
+			   ? (uint32_t)((rctx->stripes_rebuilt * 100) / total_stripes)
+			   : 100;
 
 	spdk_json_write_named_object_begin(w, "rebuild_progress");
-	spdk_json_write_named_uint32(w, "current_slot",    rctx->current_slot);
-	spdk_json_write_named_uint64(w, "current_stripe",  rctx->current_stripe);
-	spdk_json_write_named_uint64(w, "num_stripes",     rctx->num_stripes);
-	spdk_json_write_named_uint64(w, "stripes_rebuilt", rctx->stripes_rebuilt);
+	spdk_json_write_named_uint32(w, "current_slot",     rctx->current_slot);
+	spdk_json_write_named_uint64(w, "current_stripe",   rctx->current_stripe);
+	spdk_json_write_named_uint64(w, "num_stripes",      rctx->num_stripes);
+	spdk_json_write_named_uint64(w, "stripes_rebuilt",  rctx->stripes_rebuilt);
+	spdk_json_write_named_uint32(w, "slots_to_rebuild", rctx->slots_to_rebuild);
+	spdk_json_write_named_uint32(w, "percent_complete", percent);
 	spdk_json_write_object_end(w);
 }
 
