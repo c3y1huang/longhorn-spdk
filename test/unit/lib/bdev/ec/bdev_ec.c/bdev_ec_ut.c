@@ -58,13 +58,43 @@ DEFINE_STUB(spdk_bdev_get_io_channel, struct spdk_io_channel *,
 	    (struct spdk_bdev_desc *desc), NULL);
 DEFINE_STUB(spdk_bdev_reset, int, (struct spdk_bdev_desc *desc, struct spdk_io_channel *ch,
 				   spdk_bdev_io_completion_cb cb, void *cb_arg), 0);
-DEFINE_STUB(spdk_bdev_quiesce, int, (struct spdk_bdev *bdev, struct spdk_bdev_module *module,
-				     spdk_bdev_quiesce_cb cb_fn, void *cb_arg), 0);
+/*
+ * Saves the callback so a test can complete the quiesce itself. MOCK_SET
+ * still forces a submit failure, in which case nothing is saved.
+ */
+static spdk_bdev_quiesce_cb g_ut_quiesce_cb;
+static void                *g_ut_quiesce_cb_arg;
+
+DEFINE_RETURN_MOCK(spdk_bdev_quiesce, int);
+int
+spdk_bdev_quiesce(struct spdk_bdev *bdev, struct spdk_bdev_module *module,
+		  spdk_bdev_quiesce_cb cb_fn, void *cb_arg)
+{
+	HANDLE_RETURN_MOCK(spdk_bdev_quiesce);
+	g_ut_quiesce_cb     = cb_fn;
+	g_ut_quiesce_cb_arg = cb_arg;
+	return 0;
+}
+
 DEFINE_STUB(spdk_bdev_unquiesce, int, (struct spdk_bdev *bdev, struct spdk_bdev_module *module,
 				       spdk_bdev_quiesce_cb cb_fn, void *cb_arg), 0);
-DEFINE_STUB(spdk_bdev_unquiesce_range, int, (struct spdk_bdev *bdev,
-		struct spdk_bdev_module *module, uint64_t offset, uint64_t length,
-		spdk_bdev_quiesce_cb cb_fn, void *cb_arg), 0);
+
+/* Records the range of the last unquiesce. */
+static uint32_t g_ut_unquiesce_range_calls;
+static uint64_t g_ut_unquiesce_range_offset;
+static uint64_t g_ut_unquiesce_range_length;
+
+int
+spdk_bdev_unquiesce_range(struct spdk_bdev *bdev, struct spdk_bdev_module *module,
+			  uint64_t offset, uint64_t length,
+			  spdk_bdev_quiesce_cb cb_fn, void *cb_arg)
+{
+	g_ut_unquiesce_range_calls++;
+	g_ut_unquiesce_range_offset = offset;
+	g_ut_unquiesce_range_length = length;
+	return 0;
+}
+
 DEFINE_STUB(spdk_bdev_notify_blockcnt_change, int, (struct spdk_bdev *bdev, uint64_t size), 0);
 DEFINE_STUB(spdk_bdev_readv_blocks, int, (struct spdk_bdev_desc *desc,
 		struct spdk_io_channel *ch, struct iovec *iov, int iovcnt,
@@ -90,12 +120,29 @@ DEFINE_STUB_V(spdk_io_device_register, (void *io_device, spdk_io_channel_create_
 					const char *name));
 DEFINE_STUB_V(spdk_io_device_unregister, (void *io_device,
 		spdk_io_device_unregister_cb unregister_cb));
-DEFINE_STUB_V(spdk_for_each_channel, (void *io_device, spdk_channel_msg fn, void *ctx,
-				      spdk_channel_for_each_cpl cpl));
 DEFINE_STUB_V(spdk_for_each_channel_continue, (struct spdk_io_channel_iter *i, int status));
 DEFINE_STUB(spdk_io_channel_iter_get_channel, struct spdk_io_channel *,
 	    (struct spdk_io_channel_iter *i), NULL);
 DEFINE_STUB(spdk_io_channel_iter_get_ctx, void *, (struct spdk_io_channel_iter *i), NULL);
+
+/*
+ * A no-op by default. When g_ut_for_each_channel_completes is set, it
+ * behaves like a walk over zero channels and calls the completion.
+ */
+static bool g_ut_for_each_channel_completes;
+
+void
+spdk_for_each_channel(void *io_device, spdk_channel_msg fn, void *ctx,
+		      spdk_channel_for_each_cpl cpl)
+{
+	if (!g_ut_for_each_channel_completes) {
+		return;
+	}
+
+	MOCK_SET(spdk_io_channel_iter_get_ctx, ctx);
+	cpl(NULL, 0);
+	MOCK_CLEAR(spdk_io_channel_iter_get_ctx);
+}
 DEFINE_STUB(spdk_get_thread, struct spdk_thread *, (void), NULL);
 DEFINE_STUB(spdk_thread_get_name, const char *, (const struct spdk_thread *thread), "ut");
 DEFINE_STUB(spdk_thread_send_msg, int,
@@ -1380,6 +1427,79 @@ test_fail_base_bdev(void)
 }
 
 /*
+ * Successful async slot cleanup. Until the chain closes the old
+ * descriptor, replace is -EBUSY and cleanup_pending is true. The
+ * unquiesce uses the block count saved at quiesce time, even if the
+ * bdev was resized while the quiesce was pending.
+ */
+static void
+test_slot_cleanup_async(void)
+{
+	struct ec_bdev ec;
+	uint64_t       quiesced_blockcnt;
+	int            rc;
+
+	ut_init_ec(&ec, 4, 2, 64, (1ull << 30) / UT_BLOCKLEN);
+	rc = ec_compute_geometry(&ec);
+	SPDK_CU_ASSERT_FATAL(rc == 0);
+	rc = ec_alloc_runtime_arrays(&ec);
+	SPDK_CU_ASSERT_FATAL(rc == 0);
+
+	ec.bdev.name = "ec_ut_cleanup";
+	TAILQ_INSERT_TAIL(&g_ec_bdev_list, &ec, link);
+
+	quiesced_blockcnt = ec.bdev.blockcnt;
+	SPDK_CU_ASSERT_FATAL(quiesced_blockcnt > 0);
+
+	g_ut_quiesce_cb                 = NULL;
+	g_ut_quiesce_cb_arg             = NULL;
+	g_ut_unquiesce_range_calls      = 0;
+	g_ut_for_each_channel_completes = true;
+
+	/* Fail the slot: the quiesce is submitted but not yet complete. */
+	rc = ec_bdev_fail_base_bdev("ec_ut_cleanup", 1);
+	CU_ASSERT(rc == 0);
+	CU_ASSERT(ec.base_states[1] == EC_BASE_STATE_FAILED);
+	SPDK_CU_ASSERT_FATAL(g_ut_quiesce_cb != NULL);
+
+	/* Cleanup in flight: descriptor still open, replace must wait. */
+	CU_ASSERT(ec.descs[1] != NULL);
+	ut_render_base_bdevs(&ec);
+	CU_ASSERT(strstr(g_ut_json_buf, "\"cleanup_pending\":true") != NULL);
+	rc = ec_bdev_replace_base_bdev("ec_ut_cleanup", 1, "new_base", NULL, NULL);
+	CU_ASSERT(rc == -EBUSY);
+	CU_ASSERT(g_ut_unquiesce_range_calls == 0);
+
+	/* The bdev grows while the quiesce is pending. */
+	ec.bdev.blockcnt = quiesced_blockcnt * 2;
+
+	/* Quiesce completes; the chain runs through to the close. */
+	g_ut_quiesce_cb(g_ut_quiesce_cb_arg, 0);
+
+	CU_ASSERT(ec.descs[1] == NULL);
+	CU_ASSERT(g_ut_unquiesce_range_calls == 1);
+	CU_ASSERT(g_ut_unquiesce_range_offset == 0);
+	CU_ASSERT(g_ut_unquiesce_range_length == quiesced_blockcnt);
+
+	ut_render_base_bdevs(&ec);
+	CU_ASSERT(strstr(g_ut_json_buf, "\"cleanup_pending\":false") != NULL);
+	CU_ASSERT(strstr(g_ut_json_buf, "\"cleanup_pending\":true") == NULL);
+
+	/*
+	 * Replace now passes the guard. spdk_bdev_open_ext is forced to
+	 * fail so it stops at the next step without a real new bdev.
+	 */
+	MOCK_SET(spdk_bdev_open_ext, -ENODEV);
+	rc = ec_bdev_replace_base_bdev("ec_ut_cleanup", 1, "new_base", NULL, NULL);
+	CU_ASSERT(rc == -ENODEV);
+	MOCK_CLEAR(spdk_bdev_open_ext);
+
+	g_ut_for_each_channel_completes = false;
+	TAILQ_REMOVE(&g_ec_bdev_list, &ec, link);
+	ec_free_runtime_arrays(&ec);
+}
+
+/*
  * Unit coverage: deferred dedicated-channel teardown.
  *
  * A persist write to a failing disk can sit outstanding on a WIB /
@@ -1952,6 +2072,7 @@ main(int argc, char **argv)
 	CU_ADD_TEST(suite, test_replace_rejects_slot_cleanup_in_flight);
 	CU_ADD_TEST(suite, test_json_cleanup_pending);
 	CU_ADD_TEST(suite, test_fail_base_bdev);
+	CU_ADD_TEST(suite, test_slot_cleanup_async);
 
 	CU_ADD_TEST(suite, test_dedicated_channel_release);
 	CU_ADD_TEST(suite, test_dedicated_release_deferred_gate);
